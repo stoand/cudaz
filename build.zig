@@ -60,11 +60,12 @@ pub fn build(b: *std.Build) !void {
 
     /////////////////////////////////////////////////////////////
     //// Get Cuda paths
-    const cwd = try std.fs.cwd().realpathAlloc(b.allocator, ".");
+    const rel = b.path(".").getPath(b);
+
     const cuda_folder = try getCudaPath(cuda_path, b.allocator);
-    const cuda_folder_rel = try std.fs.path.relative(b.allocator, cwd, cuda_folder);
+    const cuda_folder_rel = try std.fs.path.relative(b.allocator, rel, cuda_folder);
     const cuda_include_dir = try std.fmt.allocPrint(b.allocator, "{s}/include", .{cuda_folder});
-    const cuda_include_dir_rel = try std.fs.path.relative(b.allocator, cwd, cuda_include_dir);
+    const cuda_include_dir_rel = try std.fs.path.relative(b.allocator, rel, cuda_include_dir);
 
     ////////////////////////////////////////////////////////////
     //// CudaZ Module
