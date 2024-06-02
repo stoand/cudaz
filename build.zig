@@ -3,38 +3,39 @@ const std = @import("std");
 const utils = @import("test/utils.zig");
 
 fn getCudaPath(path: ?[]const u8, allocator: std.mem.Allocator) ![]const u8 {
-
-    // Return of cuda_parent folder confirms presence of include directory.
-    return incldue_path: {
-        if (path) |parent| {
-            const cuda_file = try std.fmt.allocPrint(allocator, "{s}/include/cuda.h", .{parent});
-            defer allocator.free(cuda_file);
-            _ = std.fs.openFileAbsolute(cuda_file, .{}) catch |e| {
-                switch (e) {
-                    std.fs.File.OpenError.FileNotFound => return error.CUDA_INSTALLATION_NOT_FOUND,
-                    else => return e,
-                }
-            };
-            // Ignore /cuda.h
-            break :incldue_path parent;
-        } else {
-            const probable_roots = [_][]const u8{
-                "/usr",
-                "/usr/local/cuda",
-                "/opt/cuda",
-                "/usr/lib/cuda",
-                "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3",
-            };
-            inline for (probable_roots) |parent| h: {
-                const cuda_file = parent ++ "/include/cuda.h";
-                _ = std.fs.openFileAbsolute(cuda_file, .{}) catch {
-                    break :h;
+    return std.process.getEnvVarOwned(allocator, "CUDA_PATH") catch {
+        // Return of cuda_parent folder confirms presence of include directory.
+        return incldue_path: {
+            if (path) |parent| {
+                const cuda_file = try std.fmt.allocPrint(allocator, "{s}/include/cuda.h", .{parent});
+                defer allocator.free(cuda_file);
+                _ = std.fs.openFileAbsolute(cuda_file, .{}) catch |e| {
+                    switch (e) {
+                        std.fs.File.OpenError.FileNotFound => return error.CUDA_INSTALLATION_NOT_FOUND,
+                        else => return e,
+                    }
                 };
                 // Ignore /cuda.h
                 break :incldue_path parent;
+            } else {
+                const probable_roots = [_][]const u8{
+                    "/usr",
+                    "/usr/local/cuda",
+                    "/opt/cuda",
+                    "/usr/lib/cuda",
+                    "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3",
+                };
+                inline for (probable_roots) |parent| h: {
+                    const cuda_file = parent ++ "/include/cuda.h";
+                    _ = std.fs.openFileAbsolute(cuda_file, .{}) catch {
+                        break :h;
+                    };
+                    // Ignore /cuda.h
+                    break :incldue_path parent;
+                }
+                return error.CUDA_INSTALLATION_NOT_FOUND;
             }
-            return error.CUDA_INSTALLATION_NOT_FOUND;
-        }
+        };
     };
 }
 
@@ -63,8 +64,8 @@ pub fn build(b: *std.Build) !void {
 
     ////////////////////////////////////////////////////////////
     //// CudaZ Module
-    const cudaz_module = b.addModule("cudaz", .{ .root_source_file = .{ .path = "src/lib.zig" } });
-    cudaz_module.addIncludePath(.{ .path = cuda_include_dir });
+    const cudaz_module = b.addModule("cudaz", .{ .root_source_file = b.path("src/lib.zig") });
+    cudaz_module.addIncludePath(b.path(cuda_include_dir));
 
     const lib_paths = [_][]const u8{
         "lib",
@@ -81,7 +82,7 @@ pub fn build(b: *std.Build) !void {
 
     inline for (lib_paths) |lib_path| {
         const path = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ cuda_folder, lib_path });
-        cudaz_module.addLibraryPath(.{ .path = path });
+        cudaz_module.addLibraryPath(b.path(path));
     }
 
     ////////////////////////////////////////////////////////////
@@ -108,7 +109,7 @@ pub fn build(b: *std.Build) !void {
         while (try dir_iterator.next()) |item| {
             if (item.kind == .file) {
                 const test_path = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ "test", item.path });
-                const sub_test = b.addTest(.{ .name = item.path, .root_source_file = .{ .path = test_path }, .target = target, .optimize = optimize });
+                const sub_test = b.addTest(.{ .name = item.path, .root_source_file = b.path(test_path), .target = target, .optimize = optimize });
                 // Add Module
                 sub_test.root_module.addImport("cudaz", cudaz_module);
 
@@ -135,7 +136,7 @@ pub fn build(b: *std.Build) !void {
     //// Clean the cache folders and artifacts
 
     // Creates a binary that cleans up zig artifact folders
-    const clean = b.addExecutable(.{ .name = "clean", .root_source_file = .{ .path = "bin/delete-zig-cache.zig" }, .target = target, .optimize = optimize });
+    const clean = b.addExecutable(.{ .name = "clean", .root_source_file = b.path("bin/delete-zig-cache.zig"), .target = target, .optimize = optimize });
 
     // Creates a run step
     const clean_step = b.addRunArtifact(clean);
