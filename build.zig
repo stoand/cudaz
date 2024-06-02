@@ -1,6 +1,7 @@
 // Build file to create executables and small util binaries like clean to remove cached-dirs and default artifact folder.
 const std = @import("std");
 const utils = @import("test/utils.zig");
+const LazyPath = std.Build.LazyPath;
 
 fn getCudaPath(path: ?[]const u8, allocator: std.mem.Allocator) ![]const u8 {
     return std.process.getEnvVarOwned(allocator, "CUDA_PATH") catch {
@@ -59,13 +60,16 @@ pub fn build(b: *std.Build) !void {
 
     /////////////////////////////////////////////////////////////
     //// Get Cuda paths
+    const cwd = try std.fs.cwd().realpathAlloc(b.allocator, ".");
     const cuda_folder = try getCudaPath(cuda_path, b.allocator);
+    const cuda_folder_rel = try std.fs.path.relative(b.allocator, cwd, cuda_folder);
     const cuda_include_dir = try std.fmt.allocPrint(b.allocator, "{s}/include", .{cuda_folder});
+    const cuda_include_dir_rel = try std.fs.path.relative(b.allocator, cwd, cuda_include_dir);
 
     ////////////////////////////////////////////////////////////
     //// CudaZ Module
     const cudaz_module = b.addModule("cudaz", .{ .root_source_file = b.path("src/lib.zig") });
-    cudaz_module.addIncludePath(b.path(cuda_include_dir));
+    cudaz_module.addIncludePath(b.path(cuda_include_dir_rel));
 
     const lib_paths = [_][]const u8{
         "lib",
@@ -81,7 +85,7 @@ pub fn build(b: *std.Build) !void {
     };
 
     inline for (lib_paths) |lib_path| {
-        const path = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ cuda_folder, lib_path });
+        const path = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ cuda_folder_rel, lib_path });
         cudaz_module.addLibraryPath(b.path(path));
     }
 
